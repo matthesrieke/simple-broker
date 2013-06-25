@@ -52,9 +52,9 @@ public abstract class AbstractConsumer implements Consumer {
 		try {
 			this.client.execute(post);
 		} catch (ClientProtocolException e) {
-			logger.warn(e.getMessage(), e);
+			logger.warn(e.getMessage());
 		} catch (IOException e) {
-			logger.warn(e.getMessage(), e);
+			logger.warn(e.getMessage());
 		}
 	}
 	

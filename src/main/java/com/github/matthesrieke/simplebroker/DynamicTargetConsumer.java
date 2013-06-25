@@ -18,9 +18,10 @@
  */
 package com.github.matthesrieke.simplebroker;
 
+import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -33,17 +34,21 @@ public class DynamicTargetConsumer extends AbstractConsumer {
 
 	public DynamicTargetConsumer() {
 		super();
+		
 		try {
-			url = new URL("http://localhost:8082");
-		} catch (MalformedURLException e) {
+			url = readUrlFromFile();
+		} catch (RuntimeException e) {
+			logger.warn(e.getMessage());
+		} catch (IOException e) {
 			logger.warn(e.getMessage());
 		}
+		
 		startWatchThread();
 	}
 
 	private void startWatchThread() {
 		timerDaemon = new Timer(true);
-		timerDaemon.scheduleAtFixedRate(new CheckFile(), 0, 10000);
+		timerDaemon.scheduleAtFixedRate(new CheckFile(), 0, 60000);
 	}
 
 	@Override
@@ -53,25 +58,32 @@ public class DynamicTargetConsumer extends AbstractConsumer {
 		}
 
 	}
+	
+	protected URL readUrlFromFile() throws IOException {
+		URL resURL = getClass().getResource(TARGET_URL_FILE);
+		URLConnection resConn = resURL.openConnection();
+		resConn.setUseCaches(false);
+		InputStream contents = resConn.getInputStream();
+
+		Scanner sc = new Scanner(contents);
+		StringBuilder sb = new StringBuilder();
+		while (sc.hasNext()) {
+			sb.append(sc.nextLine());
+		}
+		sc.close();
+
+		URL newUrl = new URL(sb.toString().trim());
+		return newUrl;
+	}
 
 	private class CheckFile extends TimerTask {
 
 		@Override
 		public void run() {
+			logger.debug("Checking file for new URL");
 			try {
-				InputStream contents = getClass().getResourceAsStream(
-						TARGET_URL_FILE);
-
-				Scanner sc = new Scanner(contents);
-				StringBuilder sb = new StringBuilder();
-				while (sc.hasNext()) {
-					sb.append(sc.nextLine());
-				}
-				sc.close();
-
-				URL newUrl;
-				newUrl = new URL(sb.toString().trim());
-
+				URL newUrl = readUrlFromFile();
+				logger.debug("URL from File: {}", newUrl);
 				synchronized (DynamicTargetConsumer.this) {
 					if (!url.equals(newUrl)) {
 						logger.info("Changing consumer endpoint to {}", newUrl);
@@ -80,7 +92,7 @@ public class DynamicTargetConsumer extends AbstractConsumer {
 				}
 			} catch (RuntimeException e) {
 				logger.warn(e.getMessage());
-			} catch (MalformedURLException e) {
+			} catch (IOException e) {
 				logger.warn(e.getMessage());
 			}
 		}

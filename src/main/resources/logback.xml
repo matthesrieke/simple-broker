@@ -27,7 +27,7 @@
 		</encoder>
 	</appender>
 	<logger name="com.github.matthesrieke" level="INFO" />
-	<root level="INFO">
+	<root level="WARN">
 		<appender-ref ref="console" />
 		<appender-ref ref="FILE" />
 	</root>
