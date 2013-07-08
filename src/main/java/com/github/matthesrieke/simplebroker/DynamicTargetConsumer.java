@@ -22,72 +22,106 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.apache.http.client.HttpClient;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.ssl.AllowAllHostnameVerifier;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.conn.BasicClientConnectionManager;
+
 public class DynamicTargetConsumer extends AbstractConsumer {
 
-	private URL url;
+	private List<String> urls;
 	private Timer timerDaemon;
 	private static final String TARGET_URL_FILE = "/DynamicTargetConsumer.cfg";
 
 	public DynamicTargetConsumer() {
 		super();
-		
+
 		try {
-			url = readUrlFromFile();
+			urls = readUrlsFromFile();
 		} catch (RuntimeException e) {
 			logger.warn(e.getMessage());
 		} catch (IOException e) {
 			logger.warn(e.getMessage());
 		}
-		
+
 		startWatchThread();
 	}
 
 	private void startWatchThread() {
-		timerDaemon = new Timer(true);
+		timerDaemon = new Timer(false);
 		timerDaemon.scheduleAtFixedRate(new CheckFile(), 0, 60000);
 	}
 
 	@Override
-	protected String getTargetUrl() {
+	protected List<String> getTargetUrl() {
 		synchronized (this) {
-			return this.url.toExternalForm();
+			return this.urls;
 		}
 
 	}
+
+	@Override
+	protected HttpClient createClient() throws Exception {
+		// FIXME kind of bad practice...
+		SSLSocketFactory sslsf = new SSLSocketFactory(new TrustStrategy() {
+			@Override
+			public boolean isTrusted(final X509Certificate[] chain,
+					String authType) {
+				return true;
+			}
+		}, new AllowAllHostnameVerifier());
+
+		BasicClientConnectionManager cm = new BasicClientConnectionManager();
+		Scheme httpsScheme = new Scheme("https", 443, sslsf);
+		cm.getSchemeRegistry().register(httpsScheme);
+
+		return new DefaultHttpClient(cm);
+	}
 	
-	protected URL readUrlFromFile() throws IOException {
+	public static void main(String[] args) {
+		new DynamicTargetConsumer();
+	}
+	
+	protected List<String> readUrlsFromFile() throws IOException {
 		URL resURL = getClass().getResource(TARGET_URL_FILE);
 		URLConnection resConn = resURL.openConnection();
 		resConn.setUseCaches(false);
 		InputStream contents = resConn.getInputStream();
 
+		List<String> result = new ArrayList<String>();
+
 		Scanner sc = new Scanner(contents);
-		StringBuilder sb = new StringBuilder();
 		while (sc.hasNext()) {
-			sb.append(sc.nextLine());
+			URL newUrl = new URL(sc.nextLine().trim());
+			result.add(newUrl.toExternalForm());
 		}
 		sc.close();
 
-		URL newUrl = new URL(sb.toString().trim());
-		return newUrl;
+		return result;
 	}
 
 	private class CheckFile extends TimerTask {
 
 		@Override
 		public void run() {
-			logger.debug("Checking file for new URL");
+			logger.debug("Checking file for new URLs");
 			try {
-				URL newUrl = readUrlFromFile();
+				List<String> newUrl = readUrlsFromFile();
 				logger.debug("URL from File: {}", newUrl);
 				synchronized (DynamicTargetConsumer.this) {
-					if (!url.equals(newUrl)) {
-						logger.info("Changing consumer endpoint to {}", newUrl);
-						url = newUrl;
+					if (!urls.equals(newUrl)) {
+						logger.info("Changing consumer endpoints to {}", newUrl);
+						urls = newUrl;
 					}
 				}
 			} catch (RuntimeException e) {
@@ -98,14 +132,14 @@ public class DynamicTargetConsumer extends AbstractConsumer {
 		}
 
 	}
-	
+
 	public static class Module extends AbstractConsumer.Module {
 
 		@Override
 		protected void configure() {
 			bindConsumer(DynamicTargetConsumer.class);
 		}
-		
+
 	}
 
 }

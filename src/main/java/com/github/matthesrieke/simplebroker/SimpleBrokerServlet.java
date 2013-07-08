@@ -24,13 +24,14 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.http.HttpEntity;
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
@@ -53,6 +54,7 @@ public class SimpleBrokerServlet extends HttpServlet {
 	 */
 	private static final long serialVersionUID = 4589872023160154399L;
 	private static final Logger logger = LoggerFactory.getLogger(SimpleBrokerServlet.class);
+	private static final ExecutorService threadPool = Executors.newFixedThreadPool(2);
 
 	@Inject
 	private Set<Consumer> consumers;
@@ -60,20 +62,28 @@ public class SimpleBrokerServlet extends HttpServlet {
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
-		HttpEntity post = createPayload(req, resp);
+		final StringEntity post = createPayload(req, resp);
+		final String remoteHost = req.getRemoteHost();
 
-		for (Consumer c : consumers) {
-			try {
-				c.consume(post, req.getRemoteHost());
-			} catch (RuntimeException e) {
-				logger.warn(e.getMessage());
+		threadPool.submit(new Runnable() {
+			
+			@Override
+			public void run() {
+				for (Consumer c : consumers) {
+					try {
+						c.consume(post, remoteHost);
+					} catch (RuntimeException e) {
+						logger.warn(e.getMessage());
+					}
+				}				
 			}
-		}
+		});
+		
 
 		resp.setStatus(HttpStatus.SC_NO_CONTENT);
 	}
 
-	private HttpEntity createPayload(HttpServletRequest req,
+	private StringEntity createPayload(HttpServletRequest req,
 			HttpServletResponse resp) throws IOException {
 		Scanner sc = new Scanner(req.getInputStream());
 		StringBuilder sb = new StringBuilder();

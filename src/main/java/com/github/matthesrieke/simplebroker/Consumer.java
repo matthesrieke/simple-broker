@@ -18,11 +18,10 @@
  */
 package com.github.matthesrieke.simplebroker;
 
-import org.apache.http.HttpEntity;
+import org.apache.http.entity.StringEntity;
 
 public interface Consumer {
 
-	
-	public void consume(HttpEntity entity, String origin);
+	public void consume(StringEntity entity, String origin);
 	
 }

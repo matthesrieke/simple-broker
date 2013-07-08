@@ -19,12 +19,15 @@
 package com.github.matthesrieke.simplebroker;
 
 import java.io.IOException;
+import java.util.List;
 
-import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,28 +40,45 @@ public abstract class AbstractConsumer implements Consumer {
 	private HttpClient client;
 
 	public AbstractConsumer() {
-		this.client = createClient();
+		try {
+			this.client = createClient();
+		} catch (Exception e) {
+			logger.warn(e.getMessage(), e);
+		}
 	}
 	
-	private HttpClient createClient() {
+	protected HttpClient createClient() throws Exception {
 		DefaultHttpClient result = new DefaultHttpClient();
 		return result;
 	}
 
 	@Override
-	public void consume(HttpEntity entity, String origin) {
-		HttpPost post = new HttpPost(getTargetUrl());
-		post.setEntity(entity);
-		try {
-			this.client.execute(post);
-		} catch (ClientProtocolException e) {
-			logger.warn(e.getMessage());
-		} catch (IOException e) {
-			logger.warn(e.getMessage());
+	public void consume(StringEntity entity, String origin) {
+		List<String> urls = getTargetUrl();
+		for (String string : urls) {
+			HttpPost post = new HttpPost(string);
+			post.setEntity(entity);
+			HttpResponse response = null;
+			try {
+				response = this.client.execute(post);
+			} catch (ClientProtocolException e) {
+				logger.warn(e.getMessage());
+			} catch (IOException e) {
+				logger.warn(e.getMessage());
+			} finally {
+				if  (response != null && response.getEntity() != null) {
+					try {
+						EntityUtils.consume(response.getEntity());
+					} catch (IOException e) {
+						logger.warn(e.getMessage());
+					}
+				}
+			}
 		}
+		
 	}
 	
-	protected abstract String getTargetUrl();
+	protected abstract List<String> getTargetUrl();
 	
 	public abstract static class Module extends AbstractModule {
 		

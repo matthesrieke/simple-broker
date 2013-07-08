@@ -18,7 +18,12 @@
  */
 package com.github.matthesrieke.simplebroker;
 
-import org.apache.http.HttpEntity;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+
+import org.apache.http.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,14 +32,33 @@ public class LogFileConsumer extends AbstractConsumer {
 	private static final Logger logger = LoggerFactory.getLogger(LogFileConsumer.class);
 	
 	@Override
-	public void consume(HttpEntity entity, String origin) {
+	public void consume(StringEntity entity, String origin) {
 		logger.info("Received Request from {} with content type {} and length {}",
 				origin, entity.getContentType(), entity.getContentLength());
+		logger.info(readContent(entity));
 	}
 	
-	@Override
-	protected String getTargetUrl() {
+	private String readContent(StringEntity entity) {
+		try {
+			Scanner sc = new Scanner(entity.getContent());
+			
+			StringBuilder sb = new StringBuilder((int) entity.getContentLength());
+			while (sc.hasNext()) {
+				sb.append(sc.nextLine());
+			}
+			
+			sc.close();
+			return sb.toString();
+		} catch (IOException e) {
+			logger.warn(e.getMessage());
+		}
+		
 		return null;
+	}
+
+	@Override
+	protected List<String> getTargetUrl() {
+		return new ArrayList<String>(0);
 	}
 	
 	public static class Module extends AbstractConsumer.Module {
