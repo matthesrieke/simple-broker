@@ -19,116 +19,60 @@
 package com.github.matthesrieke.simplebroker;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.net.URLConnection;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
+import java.util.Set;
 import java.util.Timer;
-import java.util.TimerTask;
 
-import org.apache.http.client.HttpClient;
-import org.apache.http.conn.scheme.Scheme;
-import org.apache.http.conn.ssl.AllowAllHostnameVerifier;
-import org.apache.http.conn.ssl.SSLSocketFactory;
-import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.impl.conn.BasicClientConnectionManager;
+import com.github.matthesrieke.simplebroker.CheckFile.Callback;
 
 public class DynamicTargetConsumer extends AbstractConsumer {
 
-	private List<String> urls;
+	private Set<String> urls;
 	private Timer timerDaemon;
 	private static final String TARGET_URL_FILE = "/DynamicTargetConsumer.cfg";
 
-	public DynamicTargetConsumer() {
-		super();
+	  public DynamicTargetConsumer()
+	  {
+	    try
+	    {
+	      this.urls = FileUtil.readConfigFilePerLine(TARGET_URL_FILE);
+	    } catch (RuntimeException e) {
+	      logger.warn(e.getMessage());
+	    } catch (IOException e) {
+	      logger.warn(e.getMessage());
+	    }
 
-		try {
-			urls = readUrlsFromFile();
-		} catch (RuntimeException e) {
-			logger.warn(e.getMessage());
-		} catch (IOException e) {
-			logger.warn(e.getMessage());
-		}
+	    startWatchThread();
+	  }
 
-		startWatchThread();
-	}
-
-	private void startWatchThread() {
-		timerDaemon = new Timer(false);
-		timerDaemon.scheduleAtFixedRate(new CheckFile(), 0, 60000);
-	}
-
-	@Override
-	protected List<String> getTargetUrl() {
-		synchronized (this) {
-			return this.urls;
-		}
-
-	}
-
-	@Override
-	protected HttpClient createClient() throws Exception {
-		// FIXME kind of bad practice...
-		SSLSocketFactory sslsf = new SSLSocketFactory(new TrustStrategy() {
+	  private void startWatchThread() {
+	    this.timerDaemon = new Timer(true);
+	    this.timerDaemon.scheduleAtFixedRate(new CheckFile(TARGET_URL_FILE, new Callback() {
+			
 			@Override
-			public boolean isTrusted(final X509Certificate[] chain,
-					String authType) {
-				return true;
-			}
-		}, new AllowAllHostnameVerifier());
-
-		BasicClientConnectionManager cm = new BasicClientConnectionManager();
-		Scheme httpsScheme = new Scheme("https", 443, sslsf);
-		cm.getSchemeRegistry().register(httpsScheme);
-
-		return new DefaultHttpClient(cm);
-	}
-	
-	public static void main(String[] args) {
-		new DynamicTargetConsumer();
-	}
-	
-	protected List<String> readUrlsFromFile() throws IOException {
-		URL resURL = getClass().getResource(TARGET_URL_FILE);
-		URLConnection resConn = resURL.openConnection();
-		resConn.setUseCaches(false);
-		InputStream contents = resConn.getInputStream();
-
-		List<String> result = new ArrayList<String>();
-
-		Scanner sc = new Scanner(contents);
-		while (sc.hasNext()) {
-			URL newUrl = new URL(sc.nextLine().trim());
-			result.add(newUrl.toExternalForm());
-		}
-		sc.close();
-
-		return result;
-	}
-
-	private class CheckFile extends TimerTask {
-
-		@Override
-		public void run() {
-			logger.debug("Checking file for new URLs");
-			try {
-				List<String> newUrl = readUrlsFromFile();
-				logger.debug("URL from File: {}", newUrl);
+			public void updateStringSet(Set<String> newUrls) {
 				synchronized (DynamicTargetConsumer.this) {
-					if (!urls.equals(newUrl)) {
-						logger.info("Changing consumer endpoints to {}", newUrl);
-						urls = newUrl;
-					}
+					urls = newUrls;
 				}
-			} catch (RuntimeException e) {
-				logger.warn(e.getMessage());
-			} catch (IOException e) {
-				logger.warn(e.getMessage());
 			}
+			
+			@Override
+			public Object getMutex() {
+				return DynamicTargetConsumer.this;
+			}
+			
+			@Override
+			public Set<String> getCurrentStringSet() {
+				return DynamicTargetConsumer.this.urls;
+			}
+		}), 0L, 60000L);
+	  }
+
+	@Override
+	protected List<String> getTargetUrls() {
+		synchronized (this) {
+			return new ArrayList<String>(this.urls);
 		}
 
 	}

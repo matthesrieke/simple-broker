@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.Timer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,10 +35,10 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.github.matthesrieke.simplebroker.CheckFile.Callback;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
 import com.google.inject.Injector;
@@ -53,39 +54,110 @@ public class SimpleBrokerServlet extends HttpServlet {
 	 * 
 	 */
 	private static final long serialVersionUID = 4589872023160154399L;
-	private static final Logger logger = LoggerFactory.getLogger(SimpleBrokerServlet.class);
-	private static final ExecutorService threadPool = Executors.newFixedThreadPool(2);
+	private static final Logger logger = LoggerFactory
+			.getLogger(SimpleBrokerServlet.class);
+	private static final String PRODUCERS_FILE = "/allowed_producers.cfg";
+	private ExecutorService executor;
 
 	@Inject
 	private Set<Consumer> consumers;
+	private Set<String> allowedProducers;
+	private Timer timerDaemon;
+
+	public SimpleBrokerServlet() {
+		this.executor = Executors.newCachedThreadPool();
+	}
+
+	public void init() throws ServletException {
+		super.init();
+		try {
+			this.allowedProducers = FileUtil
+					.readConfigFilePerLine(PRODUCERS_FILE);
+		} catch (IOException e) {
+			throw new ServletException(e);
+		}
+
+		startWatchThread();
+	}
+
+	private void startWatchThread() {
+		this.timerDaemon = new Timer(true);
+		this.timerDaemon.scheduleAtFixedRate(new CheckFile(PRODUCERS_FILE,
+				new Callback() {
+
+					@Override
+					public void updateStringSet(Set<String> newSet) {
+						synchronized (SimpleBrokerServlet.this) {
+							SimpleBrokerServlet.this.allowedProducers = newSet;
+						}
+					}
+
+					@Override
+					public Object getMutex() {
+						return SimpleBrokerServlet.this;
+					}
+
+					@Override
+					public Set<String> getCurrentStringSet() {
+						return SimpleBrokerServlet.this.allowedProducers;
+					}
+				}), 0L, 60000L);
+	}
 
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
-		final StringEntity post = createPayload(req, resp);
-		final String remoteHost = req.getRemoteHost();
-
-		threadPool.submit(new Runnable() {
-			
-			@Override
-			public void run() {
-				for (Consumer c : consumers) {
-					try {
-						c.consume(post, remoteHost);
-					} catch (RuntimeException e) {
-						logger.warn(e.getMessage());
-					}
-				}				
+		if (verifyRemoteHost(req.getRemoteHost())) {
+			final String content;
+			final ContentType type;
+			final String remoteHost;
+			try {
+				content = readContent(req);
+				type = ContentType.parse(req.getContentType());
+				remoteHost = req.getRemoteHost();
+			} catch (IOException e) {
+				logger.warn(e.getMessage());
+				return;
 			}
-		});
-		
+
+			this.executor.submit(new Runnable() {
+
+				public void run() {
+					for (Consumer c : consumers)
+						try {
+							c.consume(content, type, remoteHost);
+						} catch (RuntimeException e) {
+							logger.warn(e.getMessage());
+						} catch (IOException e) {
+							logger.warn(e.getMessage());
+						}
+				}
+			});
+		} else {
+			logger.info("Host {} is not whitelisted. Ignoring request.",
+					req.getRemoteHost());
+		}
 
 		resp.setStatus(HttpStatus.SC_NO_CONTENT);
 	}
 
-	private StringEntity createPayload(HttpServletRequest req,
-			HttpServletResponse resp) throws IOException {
-		Scanner sc = new Scanner(req.getInputStream());
+	public synchronized Set<String> getAllowedProducers() {
+		return this.allowedProducers;
+	}
+
+	private synchronized boolean verifyRemoteHost(String remoteHost) {
+		for (String prod : getAllowedProducers()) {
+			if (remoteHost.contains(prod)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	protected String readContent(HttpServletRequest req) throws IOException {
+		String enc = req.getCharacterEncoding();
+		Scanner sc = new Scanner(req.getInputStream(), enc == null ? "utf-8"
+				: enc);
 		StringBuilder sb = new StringBuilder();
 
 		while (sc.hasNext()) {
@@ -93,10 +165,7 @@ public class SimpleBrokerServlet extends HttpServlet {
 		}
 
 		sc.close();
-
-		StringEntity result = new StringEntity(sb.toString(),
-				ContentType.parse(req.getContentType()));
-		return result;
+		return sb.toString();
 	}
 
 	public static class SimpleBrokerGuiceServletConfig extends
@@ -105,21 +174,21 @@ public class SimpleBrokerServlet extends HttpServlet {
 		@Override
 		protected Injector getInjector() {
 			ServiceLoader<Module> loader = ServiceLoader.load(Module.class);
-			
+
 			List<Module> modules = new ArrayList<Module>();
 			for (Module module : loader) {
 				modules.add(module);
 			}
-			
+
 			modules.add(new ServletModule() {
-				
+
 				@Override
 				protected void configureServlets() {
 					serve("/*").with(SimpleBrokerServlet.class);
 				}
-				
+
 			});
-			
+
 			return Guice.createInjector(modules);
 		}
 	}

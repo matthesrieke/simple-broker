@@ -18,10 +18,15 @@
  */
 package com.github.matthesrieke.simplebroker;
 
-import org.apache.http.entity.StringEntity;
+import java.io.IOException;
+
+import org.apache.http.entity.ContentType;
 
 public interface Consumer {
 
-	public void consume(StringEntity entity, String origin);
+	public void consume(String content, ContentType contentType, String origin)
+		    throws IOException;
+
+	  public abstract void destroy();
 	
 }
