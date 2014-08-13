@@ -80,6 +80,17 @@ public class SimpleBrokerServlet extends HttpServlet {
 		startWatchThread();
 	}
 
+	@Override
+	public void destroy() {
+		super.destroy();
+
+		this.timerDaemon.cancel();
+
+		for (Consumer string : consumers) {
+			string.destroy();
+		}
+	}
+
 	private void startWatchThread() {
 		this.timerDaemon = new Timer(true);
 		this.timerDaemon.scheduleAtFixedRate(new CheckFile(PRODUCERS_FILE,

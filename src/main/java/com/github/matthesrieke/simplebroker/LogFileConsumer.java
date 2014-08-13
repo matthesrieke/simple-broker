@@ -27,11 +27,13 @@ import org.slf4j.LoggerFactory;
 
 public class LogFileConsumer extends AbstractConsumer {
 
-	private static final Logger logger = LoggerFactory.getLogger(LogFileConsumer.class);
-	
+	private static final Logger logger = LoggerFactory
+			.getLogger(LogFileConsumer.class);
+
 	@Override
 	public void consume(String entity, ContentType ct, String origin) {
-		logger.info("Received Request from {} with content type {} and length {}",
+		logger.info(
+				"Received Request from {} with content type {} and length {}",
 				origin, ct, entity.length());
 	}
 
@@ -39,14 +41,14 @@ public class LogFileConsumer extends AbstractConsumer {
 	protected List<String> getTargetUrls() {
 		return new ArrayList<String>(0);
 	}
-	
+
 	public static class Module extends AbstractConsumer.Module {
 
 		@Override
 		protected void configure() {
 			bindConsumer(LogFileConsumer.class);
 		}
-		
+
 	}
 
 }

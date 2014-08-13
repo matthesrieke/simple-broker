@@ -1,3 +1,4 @@
 /AbstractConsumer_hosts.cfg
 /allowed_producers.cfg
 /DynamicTargetConsumer.cfg
+/AbstractConsumer_trustedHosts.cfg

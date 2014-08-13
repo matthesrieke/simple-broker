@@ -27,7 +27,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 public class FileUtil {
-	
+
 	public static Set<String> readConfigFilePerLine(String resourcePath)
 			throws IOException {
 		URL resURL = FileUtil.class.getResource(resourcePath);

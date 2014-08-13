@@ -32,42 +32,48 @@ public class DynamicTargetConsumer extends AbstractConsumer {
 	private Timer timerDaemon;
 	private static final String TARGET_URL_FILE = "/DynamicTargetConsumer.cfg";
 
-	  public DynamicTargetConsumer()
-	  {
-	    try
-	    {
-	      this.urls = FileUtil.readConfigFilePerLine(TARGET_URL_FILE);
-	    } catch (RuntimeException e) {
-	      logger.warn(e.getMessage());
-	    } catch (IOException e) {
-	      logger.warn(e.getMessage());
-	    }
+	public DynamicTargetConsumer() {
+		try {
+			this.urls = FileUtil.readConfigFilePerLine(TARGET_URL_FILE);
+		} catch (RuntimeException e) {
+			logger.warn(e.getMessage());
+		} catch (IOException e) {
+			logger.warn(e.getMessage());
+		}
 
-	    startWatchThread();
-	  }
+		startWatchThread();
+	}
 
-	  private void startWatchThread() {
-	    this.timerDaemon = new Timer(true);
-	    this.timerDaemon.scheduleAtFixedRate(new CheckFile(TARGET_URL_FILE, new Callback() {
-			
-			@Override
-			public void updateStringSet(Set<String> newUrls) {
-				synchronized (DynamicTargetConsumer.this) {
-					urls = newUrls;
-				}
-			}
-			
-			@Override
-			public Object getMutex() {
-				return DynamicTargetConsumer.this;
-			}
-			
-			@Override
-			public Set<String> getCurrentStringSet() {
-				return DynamicTargetConsumer.this.urls;
-			}
-		}), 0L, 60000L);
-	  }
+	@Override
+	public void destroy() {
+		super.destroy();
+
+		this.timerDaemon.cancel();
+	}
+
+	private void startWatchThread() {
+		this.timerDaemon = new Timer(true);
+		this.timerDaemon.scheduleAtFixedRate(new CheckFile(TARGET_URL_FILE,
+				new Callback() {
+
+					@Override
+					public void updateStringSet(Set<String> newUrls) {
+						synchronized (DynamicTargetConsumer.this) {
+							urls = newUrls;
+						}
+					}
+
+					@Override
+					public Object getMutex() {
+						return DynamicTargetConsumer.this;
+					}
+
+					@Override
+					public Set<String> getCurrentStringSet() {
+						return DynamicTargetConsumer.this.urls;
+					}
+				}), 0L, 60000L);
+	}
 
 	@Override
 	protected List<String> getTargetUrls() {

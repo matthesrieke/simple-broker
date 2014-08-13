@@ -52,6 +52,7 @@ import com.google.inject.multibindings.Multibinder;
 
 public abstract class AbstractConsumer implements Consumer {
 
+	private static final String TRUSTED_HOSTS_CFG_FILE = "/AbstractConsumer_trustedHosts.cfg";
 	protected static final Logger logger = LoggerFactory
 			.getLogger(AbstractConsumer.class);
 	private HttpClient client;
@@ -62,7 +63,7 @@ public abstract class AbstractConsumer implements Consumer {
 		try {
 			this.client = createClient();
 			this.trustedHosts = FileUtil
-					.readConfigFilePerLine("/AbstractConsumer_hosts.cfg");
+					.readConfigFilePerLine(TRUSTED_HOSTS_CFG_FILE);
 		} catch (Exception e) {
 			logger.warn(e.getMessage(), e);
 		}
@@ -71,9 +72,12 @@ public abstract class AbstractConsumer implements Consumer {
 	}
 
 	private void startWatchThread() {
-	    this.timerDaemon = new Timer(true);
-	    this.timerDaemon.scheduleAtFixedRate(new CheckFile("/AbstractConsumer_hosts.cfg", new LocalCallback()), 0L, 60000L);
-	  }
+		this.timerDaemon = new Timer(true);
+		this.timerDaemon
+				.scheduleAtFixedRate(new CheckFile(
+						TRUSTED_HOSTS_CFG_FILE, new LocalCallback()),
+						0L, 60000L);
+	}
 
 	protected abstract Collection<String> getTargetUrls();
 

@@ -25,8 +25,8 @@ import org.apache.http.entity.ContentType;
 public interface Consumer {
 
 	public void consume(String content, ContentType contentType, String origin)
-		    throws IOException;
+			throws IOException;
 
-	  public abstract void destroy();
-	
+	public abstract void destroy();
+
 }
